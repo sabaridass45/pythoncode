@@ -1,0 +1,550 @@
+Sqoop :
+
+1. Used for import and export the data between RDB to hdp Ecosysem (HDFS, Hive, Hive) and vice versa.
+2. Usig MapReduce (MR) for import and export data and take leverage of MR parallelism and fault tolerance.
+
+Somew Sqoop Connector:
+
+ Mysql, Netezza, Oracle, PSQL, Teradata etc
+ 
+ sqoop import --connect <db url> --username <uesr name> --password <pwd> --table <db tbl name> 
+ (say table name=customers)
+ 
+Output log while running Sqoop basic cmd:
+
+****Behind the screen running MR****
+
+
+1. Code Generation
+2. Executing the sql statement like "select * from <tbl name> limit 1" to check the meta data information and using meta data info creates the jave code.
+3. Create the JAR file in /tmp-dir/customers.jar
+4. JAR file submit to the YARN cluster manager then from here importing customers data begins
+
+Finally outfile comes into "/hdfs-home-dir/<tblname>/part-m-*" by default.
+
+Points to note: we have no. of part file based on how many mappers run in YARN application.
+Also by default we have only 4 mappers and we can change using --n or --num-mapper
+
+
+How to manage target directory while storing the output files in HDFS:
+
+sqoop import \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <db tbl name> #say db tbl name =customers
+--warehuse-dir /<our own hdfs directory>
+
+once the above cmd ran then data will be present in /<our own hdfs directory>/customers/part-m-*
+
+
+How to avoid table name(say customers) as one of the directory whileimporting data into hdfs:
+
+
+sqoop import \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <db tbl name> #say db tbl name =customers
+--target-dir /<our own hdfs directory>
+
+once the above cmd ran then data will be present in /<our own hdfs directory>/part-m-*
+
+
+Working with parquet file:
+
+sqoop import \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <db tbl name> \#say db tbl name =customers
+--target-dir /<our own hdfs directory> \#say /user/parquet
+--as-parquetfile
+
+once the above cmd ran then data will be present in /<our own hdfs directory>/<filename>.parquet
+
+How to view the data present in the parquet:
+
+Step1 : Need to use the parquet-tools.jar avalable in market
+step2 : Use the below command to view the data in parquet file
+
+hadoop jar ./parquet-tools.jar -cat json /<our own hdfs directory>/<filename>.parquet
+
+Using above cmd we can able to view data in the form of json
+
+How to check the meta data info of the parquet file:
+
+hadoop jar ./parquet-tools.jar meta /<our own hdfs directory>/<filename>.parquet
+
+
+Working with avro file:
+
+About Avro File: -- It is a row file format
+
+1. Data Serialization
+2. Schema and Data are tied to gether
+3. Data is compressed in binary format and schema is written using JSON format
+4. Schema Evolution
+5. Good performance in terms of storage and processing.
+
+sqoop import \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <db tbl name> \#say db tbl name =orders
+--target-dir /<our own hdfs directory> \#say /user/avro
+--as-avrodatafile
+
+
+Let's say initially we have schema like below in orders table:
+
+order_id int(11) NOT NULL (PRIMARY KEY)
+order_date datetime NOT NULL
+order_customer_id int(11) NOT NULL
+order_status varchar(45) NOT NULL
+
+once the above cmd ran then data will be present in /<our own hdfs directory>/part-m-*.avro
+
+Similar like parquet tool we have avro-tools to read the avro file or meta data of avro etc.
+
+hadoop jar ./avro-tools.jar tojson /<our own hdfs directory>/part-m-*.avro --> read the avro file
+
+hadoop jar ./avro-tools.jar getmeta /<our own hdfs directory>/part-m-*.avro --> to get the meta data info
+
+hadoop jar ./avro-tools.jar getschema /<our own hdfs directory>/part-m-*.avro --> to get the schema info
+
+
+Working with different compression:
+
+Gzip compressed: --Defaul compression
+
+pros : 
+Good commpression and good speed
+Good choice for cold data (where the data not used frequently)
+When used with RCFiles,sequence Files, Avro Files, gzip provides great compression and good speed plus the splittable component
+
+cons : Not splittable by MapReduce (MR)
+
+cmd:
+
+sqoop import \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <db tbl name> \#say db tbl name =customers
+--target-dir /<our own hdfs directory> \#say /user/avro_gzip
+--compress  #by default compression is gzip
+
+once the above cmd ran then data will be present in /user/avro_gzip/part-m-*.gzip
+
+Snappy Compression:
+
+Medium Compressoin
+Very fast in compression  and decompression
+with MR, Snappy are not splittable
+But when we used with seqFile,avo,parquet fle format it can be split
+FOr textfile format it is not suitable because it won't split.
+
+
+cmd:
+
+sqoop import \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <db tbl name> \#say db tbl name =customers
+--target-dir /<our own hdfs directory> \#say /user/customer-snappy
+--compress  \
+--compression-codec snappy
+
+once the above cmd ran then data will be present in /user/customer-snappy/part-m-*.snappy
+
+bzip2 COmpression:
+
+Great in compression
+very slow in compression and decompression
+splittable compression codec
+
+
+cmd:
+
+sqoop import \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <db tbl name> \#say db tbl name =customers
+--target-dir /<our own hdfs directory> \#say /user/customer-bzip2
+--compress  \
+--compression-codec bzip2
+
+once the above cmd ran then data will be present in /user/customer-snappy/part-m-*.bzip2
+
+lz4 Compression:
+
+Medium in compression but better than snappy
+Fast in compression and decompression
+Splittable compression code
+
+cmd:
+
+sqoop import \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <db tbl name> \#say db tbl name =customers
+--target-dir /<our own hdfs directory> \#say /user/customer-lz4
+--compress  \
+--compression-codec lz4
+
+once the above cmd ran then data will be present in /user/customer-lz4/part-m-*.lz4
+
+
+Conditional imports:
+
+How to extract slected records based on key from table (say customers):
+
+sqoop import \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <db tbl name> \#say db tbl name =customers
+--target-dir /<our own hdfs directory> \#say /user/customer-name
+--where "<colname>=<value>" 
+
+#<colname> --> customer_name <value>='Sachin'
+
+Selective column imports:
+
+How to exract only selected columns from table (say customers):
+
+sqoop import \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <db tbl name> \#say db tbl name =customers
+--target-dir /<our own hdfs directory> \#say /user/customer-column
+--columns "<col1>,<col2>,<col3>" 
+
+Using query:
+
+How to extract the data from the table (say db tbl name as customer) using query:
+
+sqoop import \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--target-dir /<our own hdfs directory> \#say /user/customer-query
+--query 'select * from <tablename> where <colname>=100 AND \$CONDITIONS'\
+--split-by <colname>
+
+#<colname>=customer_id
+
+Three things to remember while using "--query"
+
+1. Remove "--table" from the sqoop cmd.
+2. Add "AND \$CONDITIONS"
+3. Add "--split-by"
+
+Split-by and Boundary Query:
+
+Suppose we have table(say product) without primary key and when try to run sqoop cmd without using "split-by" key then the cmd will fail since we dont have any primary key in the table.
+
+Error while running below sqoop cmd:
+
+sqoop import \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <tbl name> \#(say db tbl name=product)
+--target-dir /<our own hdfs directory> \#say /user/customer-product
+
+Points to remember:  If our table having primary key but running without "split-by" key then cmd will run using single mapper(by default) since it consider primary key as split-by column by deafult.
+
+To avoid above issue(error) split-by" keyword as below
+
+sqoop import \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <tbl name> \#(say db tbl name=product) and table have no primary key column
+--target-dir /<our own hdfs directory> \#say /user/customer-product
+--split-by <col_name>  #col_name=product_id
+
+The above cmd will have 4 mapper and default boundary query will be like "select min(product_id),max(product_id) from product" when using "split-by" keyword(having split-by column as product_id)
+
+Explain how it divide the records for each mapper while using "split-by" without having "boundary-query" keyword in sqoop cmd:
+
+let say min(product_id)=1, max(product_id)=1345 and mapper=4 and total_count_of_product=1345
+
+No_of_records_per_mapper= 1345/4 = 336
+
+mapper_1 = min(product_id) + No_of_records_per_mapper = 337
+
+For mapper_1, boundary-query is select * from product where product_id>=1 and product_id<=337
+
+mapper_2 = mapper_1 + No_of_records_per_mapper = 673
+
+For mapper_2, boundary-query is select * from product where product_id>337 and product_id<=673
+
+mapper_3 = mapper_2 + No_of_records_per_mapper = 1009
+
+For mapper_3, boundary-query is select * from product where product_id>337 and product_id<=1009
+
+mapper_4 = mapper_3 + No_of_records_per_mapper = 1345
+
+For mapper_4, boundary-query is select * from product where product_id>1009 and product_id<=1345
+
+Finally we retrieved 1345 records from a table product (total count of product table is 1345)
+
+********** explanation ends here*************
+
+We can set our own boundary query using "boundary-query" keyword in sqoop cmd and doing this we can split the mapper based on our own boundary query
+
+sqoop import \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <tbl name> \#(say db tbl name=product) and table have no primary key column
+--target-dir /<our own hdfs directory> \#say /user/customer-product
+--boundary-query "select min(product_id),max(product_id) from product where product_id>100"
+--split-by <col_name>  #col_name=product_id
+
+The above cmd will have 4 mapper and our boundary query will be like "select min(product_id),max(product_id) from product where product_id>100" when using "split-by" keyword(having split-by column as product_id)
+
+Explain how it divide the records for each mapper while using "split-by" with "boundary-query" keyword in sqoop cmd:
+
+let say min(product_id)=101, max(product_id)=1345 and mapper=4 and total_count_of_product=1345
+
+No_of_records_per_mapper= (max(product_id) - min(product_id))/mapper = 311
+
+mapper_1 = min(product_id) + No_of_records_per_mapper = 412
+
+For mapper_1, boundary-query is select * from product where product_id>=101 and product_id<=412
+
+mapper_2 = mapper_1 + No_of_records_per_mapper = 723
+
+For mapper_2, boundary-query is select * from product where product_id>412 and product_id<=723
+
+mapper_3 = mapper_2 + No_of_records_per_mapper = 1034
+
+For mapper_3, boundary-query is select * from product where product_id>723 and product_id<=1034
+
+mapper_4 = mapper_3 + No_of_records_per_mapper = 1345
+
+For mapper_4, boundary-query is select * from product where product_id>1034 and product_id<=1345
+
+Finally we retrieved 1245 records(all columns) from a table product (total count of product table is 1345) since we have limited the records in the boundary query.
+
+*********explanation end here*************
+
+How we can have our own delimiter:
+
+sqoop import \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <db tbl name> \#say db tbl name =customers
+--target-dir /<our own hdfs directory> \#say /user/customer-field-delim
+--columns "<col1>,<col2>,<col3>" 
+--fields-terminated-by "|"
+
+When using the above cmd then file will be delimited by "|" in /<our own hdfs directory>/ and if we not used the "fields-terminated-by" keyword then default delimiter is comma sperator.
+
+How to handle null string/null non-string:
+
+sqoop import \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <db tbl name> \#say db tbl name =customers
+--target-dir /<our own hdfs directory> \#say /user/customer-null
+--null-string "xxx" \ #Replace the NULL present in string dtype column by  "xxx"
+--null-non-string "yyy" #Replace the NULL present in non string dtype like int,long etc column by "yyy"
+
+Incremetal Append:
+
+Three param needed for incremental Apend:
+
+--incremental append 
+--check-column <column>
+--last-value <column value>
+
+Usecase for Incremental Append:
+    Supppose I am importing the data from the db tbl "orders" to hdfs /user/orders/parm-m-000[0-3] for the first time and wants to syncup data between the "orders" tbl and hdfs path without importing the same records once again (since we have old data already) whenever "orders" tbl gets increased (note: orders tbl is incremental load i.e, tbl only insert the records)
+    
+Solution:
+
+    Let's say we have schema like below in orders table:
+
+    order_id int(11) NOT NULL (PRIMARY KEY)
+    order_date datetime NOT NULL
+    order_customer_id int(11) NOT NULL
+    order_status varchar(45) NOT NULL    
+
+    Initially data present in orders table:
+    1,2020-10-10,12345,delivered
+    2,2020-10-10,54321,not delivered
+    3,2020-10-10,67890,not delivered
+    4,2020-10-10,09876,delivered
+
+Steps:
+
+1. Run the below cmd for the first time:
+
+sqoop import \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <db tbl name> \#say db tbl name =orders
+--target-dir /<our own hdfs directory> \#say /user/orders-increment
+
+Once the above cmd ran then in each partion we have each record in /user/orders-increment/part-m-000[0-3] (by default we have 4 mappers)
+
+2. Insert the new records in orders table
+
+5,2020-10-10,23456,delivered
+6,2020-10-10,34567,not delivered
+7,2020-10-10,45678,delivered
+8,2020-10-10,56789,not delivered
+
+Now we have 8 records in orders table but in hdfs path we have only 4 records. Now we need to syncup the newly inserted records in hdfs path as well without inserting/overwriting the old data again in /user/orders-increment/part-m-000[0-3]
+
+
+3. Run the sqoop cmd to add the newly inserted record from orders tbl to hdfs path
+
+sqoop import \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <db tbl name> \#say db tbl name =orders
+--target-dir /<our own hdfs directory> \#say /user/orders-increment
+--incremental append \
+--check-column order-id \#tells based on which column need to check newly inserted record
+--last-value 4 \#tells the latest value of order_id column.Here 4 is latest column value becoz after that record #only we have 4 newly inserted records
+
+Once the above cmd ran then we have another 4 partition in hdfs path /user/orders-increment/part-m-000[0-7]
+
+Note: while running above cmd we have boundary-query like select min(order-id),max(order-id) fom orders where order-id>4 and order-id<=8
+
+************solution ends here*********
+
+In the above solution we need to run the sqoop cmd (step 3) whenever table "orders" gets increased by changing the "last-value" keyword. To avoid that we need to create the sqoop job like below:
+
+
+Steps:
+1. create the sqoop job and execute it
+
+sqoop job --create order-incrmnt\
+-import
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <db tbl name> \#say db tbl name =orders
+--target-dir /<our own hdfs directory> \#say /user/orders-increment
+--incremental append \
+--check-column order-id \#tells based on which column need to check newly inserted record
+--last-value 4 \#tells the latest value of order_id column.lets say 4 is latest column value becoz after that record only we have 4 newly inserted records
+
+    1.1: To list available sqoop job--> cmd:sqoop job --list
+    
+2. Execute the created sqoop job and by doing this we no need to change the value of "last-value" keyword
+
+cmd : sqoop job --exec order-incrmnt
+
+please note that while running step2 cmd will ask password of db.
+
+*********************************************************************************
+
+Hive import:
+
+How to import the data of db table "customers" to hive table "customer_mysql" directly:
+
+sqoop import \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <db tbl name> \#say db tbl name =customers
+--fields-terminated-by "|"\ #optional keyword to change the delimiter of data
+--hive-import\
+--hive-database <db_name> \# db_name="default"
+--hive_table <tbl name> #hive tbl name=customer_mysql
+
+
+Sqoop List Tables/Database:
+
+How to list the db of mysql:
+
+sqoop list-databases \
+--connect <mysql url> \
+--username <uesr name> \
+--password <pwd> 
+
+How to list the table of mysql:
+
+sqoop list-tables \
+--connect <mysql url> \
+--username <uesr name> \
+--password <pwd> 
+
+How to check the schema of any table:
+
+sqoop eval \
+--connect <mysql url> \
+--username <uesr name> \
+--password <pwd> \
+--query "describe <tbl>" #<tbl>="customers"
+
+
+Sqoop Export:
+
+USed to export from HDFS to DB.
+
+how to Export HDFS file (.txt fromat) to DB:
+
+sqoop export \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <db tbl name> \#say db tbl name =customers_export
+--export-dir <hdfs-dir> \#/user/export-customer/
+--input-fields-terminated-by '|' \#tels the hdfs file delimiter
+--input-null-string 'EMPTY' \#replace NULL present in hdfs file into 'EMPTY' for string dtype column
+--input-non-null-string '0' \#replace NULL present in hdfs file into '0' for non string dtype column like int,long --m 3 \#tells the num of mappers explicitly
+
+How to export Hive to DB:
+
+sqoop export \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <db tbl name> \#say db tbl name =product_export
+--hcatalog-table <hive tbl name> #hive tbl = product_hive
+
+How to export avro HDFS file to DB:
+
+sqoop export \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <db tbl name> \#say db tbl name =customers_export_avro
+--export-dir <hdfs-dir> \#/user/export-customer-avro/
+
+By default, using MR when exporting avro file or any file format to any db tbl then that itself will handle the file foramt.
+
+How to export parquet HDFS file to DB:
+
+sqoop export \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <db tbl name> \#say db tbl name =customers_export_parq
+--export-dir <hdfs-dir> \#/user/export-customer-parq/
+
+How to export bzip HDFS file to DB:
+
+sqoop export \
+--connect <db url> \
+--username <uesr name> \
+--password <pwd> \
+--table <db tbl name> \#say db tbl name =customers_export_bzip
+--export-dir <hdfs-dir> \#/user/export-customer-bzip/
